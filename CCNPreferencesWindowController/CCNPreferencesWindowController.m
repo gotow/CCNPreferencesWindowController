@@ -34,6 +34,7 @@
 static NSString *const CCNPreferencesToolbarIdentifier                 = @"CCNPreferencesMainToolbar";
 static NSString *const CCNPreferencesToolbarSegmentedControlIdentifier = @"CCNPreferencesToolbarSegmentedControl";
 static NSString *const CCNPreferencesWindowFrameAutoSaveName           = @"CCNPreferencesWindowFrameAutoSaveName";
+static NSString *const CCNPreferencesWindowLastFrame                   = @"CCNPreferencesWindowLastFrame";
 static NSRect CCNPreferencesDefaultWindowRect;
 static NSSize CCNPreferencesToolbarSegmentedControlItemInset;
 static unsigned short const CCNEscapeKey = 53;
@@ -47,8 +48,14 @@ static unsigned short const CCNEscapeKey = 53;
 @interface CCNPreferencesWindow : NSWindow
 @end
 
-
-
+/**
+ ====================================================================================================================
+ */
+#pragma mark CCNImageView
+#pragma mark -
+@interface CCNImageView : NSButton
+@property (retain) NSString *itemIdentifier;
+@end
 
 /**
  ====================================================================================================================
@@ -89,6 +96,7 @@ static unsigned short const CCNEscapeKey = 53;
     self.showToolbarWithSingleViewController = YES;
     self.showToolbarItemsAsSegmentedControl = NO;
     self.centerToolbarItems = YES;
+    self.toolbarItemSpacing = 0.0;
     self.showToolbarSeparator = YES;
     self.allowsVibrancy = NO;
     self.titleVisibility = YES;
@@ -114,6 +122,7 @@ static unsigned short const CCNEscapeKey = 53;
         else {
             self.toolbar.allowsUserCustomization = self.shouldAllowToolBarCustomization;
             self.toolbar.autosavesConfiguration = YES;
+            self.toolbar.displayMode = NSToolbarDisplayModeIconAndLabel;
         }
 
         self.toolbar.showsBaselineSeparator = self.showToolbarSeparator;
@@ -210,6 +219,14 @@ static unsigned short const CCNEscapeKey = 53;
     }
 }
 
+- (void)setToolbarItemSpacing:(float)toolbarItemSpacing {
+    if (_toolbarItemSpacing != toolbarItemSpacing) {
+        _toolbarItemSpacing = toolbarItemSpacing;
+        self.toolbarDefaultItemIdentifiers = nil;
+        [self setupToolbar];
+    }
+}
+
 - (void)setShowToolbarItemsAsSegmentedControl:(BOOL)showToolbarItemsAsSegmentedControl {
     if (_showToolbarItemsAsSegmentedControl != showToolbarItemsAsSegmentedControl) {
         _showToolbarItemsAsSegmentedControl = showToolbarItemsAsSegmentedControl;
@@ -248,6 +265,19 @@ static unsigned short const CCNEscapeKey = 53;
     return nil;
 }
 
+- (BOOL)showViewControllerWithIdentifier:(NSString *)identifier {
+    BOOL result = NO;
+    if([self viewControllerWithIdentifier:identifier]) {
+        for(NSToolbarItem *item in self.toolbar.items) {
+            if([item.itemIdentifier isEqualToString:identifier] && item.target) {
+                [NSApp sendAction:item.action to:item.target from:item];
+                result = YES;
+            }
+        }
+    }
+    return result;
+}
+
 - (void)activateViewController:(id<CCNPreferencesWindowControllerProtocol>)viewController animate:(BOOL)animate {
     NSRect currentWindowFrame      = self.window.frame;
     NSRect viewControllerFrame     = [(NSViewController *)viewController view].frame;
@@ -264,7 +294,7 @@ static unsigned short const CCNEscapeKey = 53;
         self.window.title = NSLocalizedString(@"Preferences", @"CCNPreferencesWindow: default window title with segmented control in toolbar");
     }
     else {
-        self.window.title = [viewController preferenceTitle];
+        self.window.title = [NSString stringWithFormat:@"%@ : %@", [[NSRunningApplication currentApplication] localizedName], [viewController preferenceTitle]];
     }
 
     NSView *newContentView = [(NSViewController *)viewController view];
@@ -299,7 +329,8 @@ static unsigned short const CCNEscapeKey = 53;
 - (void)toolbarItemAction:(NSToolbarItem *)toolbarItem {
     if (![[self.activeViewController preferenceIdentifier] isEqualToString:toolbarItem.itemIdentifier]) {
         id<CCNPreferencesWindowControllerProtocol> vc = [self viewControllerWithIdentifier:toolbarItem.itemIdentifier];
-        [self activateViewController:vc animate:YES];
+        [self activateViewController:vc animate:NO];
+        self.toolbar.selectedItemIdentifier = toolbarItem.itemIdentifier;
     }
 }
 
@@ -337,12 +368,29 @@ static unsigned short const CCNEscapeKey = 53;
         }
 
         NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:identifier];
+        
+        if(self.toolbarItemSpacing > 0) {
+            float iconHeight = (toolbar.sizeMode == NSToolbarSizeModeSmall) ? 24 : 32;
+            float iconSpacing = self.toolbarItemSpacing * ((toolbar.sizeMode == NSToolbarSizeModeSmall) ?  0.75 : 1.0);
+            NSSize iconSize = NSMakeSize(iconHeight + iconSpacing, iconHeight);
+            CCNImageView *view = [[CCNImageView alloc] initWithFrame:NSMakeRect(0, 0, iconSize.width, iconSize.height)];
+            
+            view.target                = self;
+            view.action                = @selector(toolbarItemAction:);
+            view.itemIdentifier        = identifier;
+            view.image                 = icon;
+            toolbarItem.view           = view;
+            toolbarItem.minSize        = iconSize;
+            toolbarItem.maxSize        = iconSize;
+        }
+        else {
+            toolbarItem.target         = self;
+            toolbarItem.action         = @selector(toolbarItemAction:);
+            toolbarItem.image          = icon;
+        }
         toolbarItem.label          = label;
         toolbarItem.paletteLabel   = label;
-        toolbarItem.image          = icon;
         toolbarItem.toolTip        = toolTip;
-        toolbarItem.target         = self;
-        toolbarItem.action         = @selector(toolbarItemAction:);
         
         return toolbarItem;
     }
@@ -406,8 +454,11 @@ static unsigned short const CCNEscapeKey = 53;
 }
 
 - (instancetype)init {
-    self = [super initWithContentRect:CCNPreferencesDefaultWindowRect
-                            styleMask:(NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSUnifiedTitleAndToolbarWindowMask)
+    NSRect frameRect = CCNPreferencesDefaultWindowRect;
+    NSString *lastFrame = [[NSUserDefaults standardUserDefaults] objectForKey:CCNPreferencesWindowLastFrame];
+    if(lastFrame) frameRect = NSRectFromString(lastFrame);
+    self = [super initWithContentRect:frameRect
+                            styleMask:(NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSUnifiedTitleAndToolbarWindowMask | NSResizableWindowMask)
                               backing:NSBackingStoreBuffered
                                 defer:YES];
     if (self) {
@@ -426,6 +477,35 @@ static unsigned short const CCNEscapeKey = 53;
             break;
         default: [super keyDown:theEvent];
     }
+}
+
+- (void)close {
+    [[NSUserDefaults standardUserDefaults] setObject:NSStringFromRect(self.frame) forKey:CCNPreferencesWindowLastFrame];
+    [super close];
+}
+
+@end
+
+
+/**
+ ====================================================================================================================
+ */
+
+#pragma mark - CCNImageView
+#pragma mark -
+
+@implementation CCNImageView
+
+- (id)initWithFrame:(NSRect)frameRect
+{
+    self = [super initWithFrame:frameRect];
+    if(self) {
+        self.bezelStyle = NSRegularSquareBezelStyle;
+        self.buttonType = NSMomentaryChangeButton;
+        self.imagePosition = NSImageOnly;
+        self.bordered = NO;
+    }
+    return self;
 }
 
 @end

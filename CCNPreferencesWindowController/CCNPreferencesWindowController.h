@@ -100,6 +100,17 @@
  The default is `YES`.
  */
 @property (assign, nonatomic) BOOL centerToolbarItems;
+
+/**
+ Float property that sets specific spacing between toolbarItems
+ 
+ If set to a positive value, toolbar items will have the specified spacing between them. Otherwise they are auto-sized to fit.
+ This property is ignored if `showToolbarItemsAsSegmentedControl` set to `YES`.
+ 
+ The default is 0.0.
+ */
+@property (assign, nonatomic) float toolbarItemSpacing;
+
 /**
  *  Boolean property that indicates whether the toolbar should be customizable.
  *  This property is ignored if `showToolbarItemsAsSegmentedControl` set to `YES`.
@@ -140,6 +151,18 @@ preferences.centerToolbarItems = YES;
  ```
  */
 - (void)setPreferencesViewControllers:(NSArray *)viewControllers;
+
+/**
+ Return the view controller with the given identifier.
+ 
+ */
+- (id<CCNPreferencesWindowControllerProtocol>)viewControllerWithIdentifier:(NSString *)identifier;
+
+/**
+ Activate the view controller with the given identifier.
+ 
+ */
+- (BOOL)showViewControllerWithIdentifier:(NSString *)identifier;
 
 
 #pragma mark - Show/Hide Preferences Window

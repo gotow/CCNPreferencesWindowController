@@ -35,6 +35,7 @@ static NSString *const CCNPreferencesToolbarIdentifier                 = @"CCNPr
 static NSString *const CCNPreferencesToolbarSegmentedControlIdentifier = @"CCNPreferencesToolbarSegmentedControl";
 static NSString *const CCNPreferencesWindowFrameAutoSaveName           = @"CCNPreferencesWindowFrameAutoSaveName";
 static NSString *const CCNPreferencesWindowLastFrame                   = @"CCNPreferencesWindowLastFrame";
+static NSString *const CCNPreferencesViewLastFrameFormat               = @"CCNPreferencesView%@Frame";
 static NSRect CCNPreferencesDefaultWindowRect;
 static NSSize CCNPreferencesToolbarSegmentedControlItemInset;
 static unsigned short const CCNEscapeKey = 53;
@@ -279,8 +280,26 @@ static unsigned short const CCNEscapeKey = 53;
 }
 
 - (void)activateViewController:(id<CCNPreferencesWindowControllerProtocol>)viewController animate:(BOOL)animate {
-    NSRect currentWindowFrame      = self.window.frame;
+    // Save the current viewController's frame
+    if(self.activeViewController) {
+        NSString *currentFrameKey  = [NSString stringWithFormat:CCNPreferencesViewLastFrameFormat, self.activeViewController.preferenceIdentifier];
+        [[NSUserDefaults standardUserDefaults] setObject:NSStringFromRect([(NSViewController *)self.activeViewController view].frame) forKey:currentFrameKey];
+    }
+    
+    // Now get the new viewController's default and saved frames
     NSRect viewControllerFrame     = [(NSViewController *)viewController view].frame;
+    NSString *lastFrameKey         = [NSString stringWithFormat:CCNPreferencesViewLastFrameFormat, viewController.preferenceIdentifier];
+    NSString *lastFrame            = [[NSUserDefaults standardUserDefaults] objectForKey:lastFrameKey];
+    
+    if(lastFrame.length > 0) {
+        NSRect rect = NSRectFromString(lastFrame);
+        if(NSHeight(rect) > NSHeight(viewControllerFrame))
+            viewControllerFrame.size.height = rect.size.height;
+    }
+
+    // We have to juggle the origin because the frame is specified from the
+    // bottom left and we want to keep the window's title bar in the same place.
+    NSRect currentWindowFrame      = self.window.frame;
     NSRect frameRectForContentRect = [self.window frameRectForContentRect:viewControllerFrame];
 
     CGFloat deltaX = NSWidth(currentWindowFrame) - NSWidth(frameRectForContentRect);
@@ -298,7 +317,7 @@ static unsigned short const CCNEscapeKey = 53;
     }
 
     NSView *newContentView = [(NSViewController *)viewController view];
-    newContentView.alphaValue = 0;
+    newContentView.alphaValue = 0.0;
 
     if (self.allowsVibrancy) {
         NSVisualEffectView *effectView = [[NSVisualEffectView alloc] initWithFrame:newContentView.frame];

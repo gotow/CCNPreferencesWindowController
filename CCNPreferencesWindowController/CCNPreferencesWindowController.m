@@ -47,6 +47,9 @@ static unsigned short const CCNEscapeKey = 53;
 #pragma mark CCNPreferencesWindow
 #pragma mark -
 @interface CCNPreferencesWindow : NSWindow
+
+- (void)setToolbarStyle:(NSInteger)style;
+
 @end
 
 /**
@@ -387,13 +390,16 @@ static unsigned short const CCNEscapeKey = 53;
         }
 
         NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:identifier];
+        NSOperatingSystemVersion version = NSProcessInfo.processInfo.operatingSystemVersion;
         
-        if(self.toolbarItemSpacing > 0) {
+        // Set up item spacing if it's specified and we're running on a version of macOS prior to
+        // Big Sur. As of Big Sur, NSWindowToolbarStylePreference will take care of this for us.
+        if(self.toolbarItemSpacing > 0 && version.majorVersion == 10 && version.minorVersion < 16) {
             float iconHeight = (toolbar.sizeMode == NSToolbarSizeModeSmall) ? 24 : 32;
             float iconSpacing = self.toolbarItemSpacing * ((toolbar.sizeMode == NSToolbarSizeModeSmall) ?  0.75 : 1.0);
             NSSize iconSize = NSMakeSize(iconHeight + iconSpacing, iconHeight);
             CCNImageView *view = [[CCNImageView alloc] initWithFrame:NSMakeRect(0, 0, iconSize.width, iconSize.height)];
-            
+
             view.target                = self;
             view.action                = @selector(toolbarItemAction:);
             view.itemIdentifier        = identifier;
@@ -484,6 +490,10 @@ static unsigned short const CCNEscapeKey = 53;
         [self center];
         self.frameAutosaveName = CCNPreferencesWindowFrameAutoSaveName;
         [self setFrameFromString:CCNPreferencesWindowFrameAutoSaveName];
+        if (@available(macOS 10.16, *)) {
+            if([self respondsToSelector:@selector(setToolbarStyle:)])
+                [self setToolbarStyle:2]; // NSWindowToolbarStylePreference
+        }
     }
     return self;
 }

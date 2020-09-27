@@ -392,12 +392,13 @@ static unsigned short const CCNEscapeKey = 53;
         NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:identifier];
         NSOperatingSystemVersion version = NSProcessInfo.processInfo.operatingSystemVersion;
         
+        float iconHeight = (toolbar.sizeMode == NSToolbarSizeModeSmall) ? 24 : 32;
+        float iconSpacing = self.toolbarItemSpacing * ((toolbar.sizeMode == NSToolbarSizeModeSmall) ?  0.75 : 1.0);
+        NSSize iconSize = NSMakeSize(iconHeight + iconSpacing, iconHeight);
+
         // Set up item spacing if it's specified and we're running on a version of macOS prior to
         // Big Sur. As of Big Sur, NSWindowToolbarStylePreference will take care of this for us.
         if(self.toolbarItemSpacing > 0 && version.majorVersion == 10 && version.minorVersion < 16) {
-            float iconHeight = (toolbar.sizeMode == NSToolbarSizeModeSmall) ? 24 : 32;
-            float iconSpacing = self.toolbarItemSpacing * ((toolbar.sizeMode == NSToolbarSizeModeSmall) ?  0.75 : 1.0);
-            NSSize iconSize = NSMakeSize(iconHeight + iconSpacing, iconHeight);
             CCNImageView *view = [[CCNImageView alloc] initWithFrame:NSMakeRect(0, 0, iconSize.width, iconSize.height)];
 
             view.target                = self;
@@ -412,6 +413,8 @@ static unsigned short const CCNEscapeKey = 53;
             toolbarItem.target         = self;
             toolbarItem.action         = @selector(toolbarItemAction:);
             toolbarItem.image          = icon;
+            // We're not supposed to do this, but Big Sur's "equal spacing" doesn't work
+            toolbarItem.minSize        = iconSize;
         }
         toolbarItem.label          = label;
         toolbarItem.paletteLabel   = label;
@@ -434,7 +437,14 @@ static unsigned short const CCNEscapeKey = 53;
 
         // the toolbar will be presented with standard NSToolbarItem's
         else {
-            if (self.centerToolbarItems) {
+            BOOL centerUsingFlexibleSpaces = self.centerToolbarItems;
+            
+            if (@available(macOS 10.16, *)) {
+                if([self.window respondsToSelector:@selector(setToolbarStyle:)])
+                    centerUsingFlexibleSpaces = NO;
+            }
+
+            if (centerUsingFlexibleSpaces) {
                 [self.toolbarDefaultItemIdentifiers insertObject:NSToolbarFlexibleSpaceItemIdentifier atIndex:0];
             }
 
@@ -444,7 +454,7 @@ static unsigned short const CCNEscapeKey = 53;
                 [wSelf.toolbarDefaultItemIdentifiers insertObject:[vc preferenceIdentifier] atIndex:idx + offset];
             }];
 
-            if (self.centerToolbarItems) {
+            if (centerUsingFlexibleSpaces) {
                 [self.toolbarDefaultItemIdentifiers insertObject:NSToolbarFlexibleSpaceItemIdentifier atIndex:self.toolbarDefaultItemIdentifiers.count];
             }
         }

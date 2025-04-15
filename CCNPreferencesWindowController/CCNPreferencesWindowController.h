@@ -28,7 +28,7 @@
  */
 
 #import <AppKit/AppKit.h>
-#import "CCNPreferencesWindowControllerProtocol.h"
+#import <CCNPreferencesWindowController/CCNPreferencesWindowControllerProtocol.h>
 
 
 @interface CCNPreferencesWindowController : NSWindowController

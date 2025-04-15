@@ -47,9 +47,6 @@ static unsigned short const CCNEscapeKey = 53;
 #pragma mark CCNPreferencesWindow
 #pragma mark -
 @interface CCNPreferencesWindow : NSWindow
-
-- (void)setToolbarStyle:(NSInteger)style;
-
 @end
 
 /**
@@ -96,6 +93,10 @@ static unsigned short const CCNEscapeKey = 53;
     self.viewControllers = [[NSMutableOrderedSet alloc] init];
     self.activeViewController = nil;
     self.window = [[CCNPreferencesWindow alloc] init];
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(windowWillClose:)
+                                               name:NSWindowWillCloseNotification
+                                             object:self.window];
 
     self.showToolbarWithSingleViewController = YES;
     self.showToolbarItemsAsSegmentedControl = NO;
@@ -160,6 +161,7 @@ static unsigned short const CCNEscapeKey = 53;
 }
 
 - (void)dealloc {
+    [NSNotificationCenter.defaultCenter removeObserver:self];
     _viewControllers = nil;
     _activeViewController = nil;
     _toolbar = nil;
@@ -270,13 +272,27 @@ static unsigned short const CCNEscapeKey = 53;
 }
 
 - (BOOL)showViewControllerWithIdentifier:(NSString *)identifier {
+    id vc;
     BOOL result = NO;
-    if([self viewControllerWithIdentifier:identifier]) {
+    NSString *anchor = nil;
+    
+    if([identifier containsString:@":"]) {
+        NSArray *parts = [identifier componentsSeparatedByString:@":"];
+        identifier = parts[0];
+        anchor = parts[1];
+    }
+    
+    vc = [self viewControllerWithIdentifier:identifier];
+    
+    if(vc != nil) {
         for(NSToolbarItem *item in self.toolbar.items) {
             if([item.itemIdentifier isEqualToString:identifier] && item.target) {
                 [NSApp sendAction:item.action to:item.target from:item];
                 result = YES;
             }
+        }
+        if(anchor && [vc respondsToSelector:@selector(goToAnchor:)]) {
+            [vc goToAnchor:anchor];
         }
     }
     return result;
@@ -284,20 +300,16 @@ static unsigned short const CCNEscapeKey = 53;
 
 - (void)activateViewController:(id<CCNPreferencesWindowControllerProtocol>)viewController animate:(BOOL)animate {
     // Save the current viewController's frame
-    if(self.activeViewController) {
-        NSString *currentFrameKey  = [NSString stringWithFormat:CCNPreferencesViewLastFrameFormat, self.activeViewController.preferenceIdentifier];
-        [[NSUserDefaults standardUserDefaults] setObject:NSStringFromRect([(NSViewController *)self.activeViewController view].frame) forKey:currentFrameKey];
+    if(self.activeViewController && (self.window.styleMask & NSWindowStyleMaskResizable)) {
+        [self saveFrameForViewController:self.activeViewController];
     }
     
     // Now get the new viewController's default and saved frames
     NSRect viewControllerFrame     = [(NSViewController *)viewController view].frame;
-    NSString *lastFrameKey         = [NSString stringWithFormat:CCNPreferencesViewLastFrameFormat, viewController.preferenceIdentifier];
-    NSString *lastFrame            = [[NSUserDefaults standardUserDefaults] objectForKey:lastFrameKey];
+    NSRect lastFrame               = [self frameForViewController:viewController];
     
-    if(lastFrame.length > 0) {
-        NSRect rect = NSRectFromString(lastFrame);
-        if(NSHeight(rect) > NSHeight(viewControllerFrame))
-            viewControllerFrame.size.height = rect.size.height;
+    if(NSHeight(lastFrame) > NSHeight(viewControllerFrame)) {
+        viewControllerFrame.size.height = lastFrame.size.height;
     }
 
     // We have to juggle the origin because the frame is specified from the
@@ -344,6 +356,33 @@ static unsigned short const CCNEscapeKey = 53;
     } completionHandler:^{
         wSelf.activeViewController = viewController;
     }];
+}
+
+- (void)saveFrameForViewController:(id<CCNPreferencesWindowControllerProtocol>)viewController
+{
+    NSString *currentFrameKey  = [NSString stringWithFormat:CCNPreferencesViewLastFrameFormat, viewController.preferenceIdentifier];
+    [[NSUserDefaults standardUserDefaults] setObject:NSStringFromRect([(NSViewController *)viewController view].frame) forKey:currentFrameKey];
+}
+
+- (NSRect)frameForViewController:(id<CCNPreferencesWindowControllerProtocol>)viewController
+{
+    NSRect result           = NSZeroRect;
+    NSString *lastFrameKey  = [NSString stringWithFormat:CCNPreferencesViewLastFrameFormat, viewController.preferenceIdentifier];
+    NSString *lastFrame     = [[NSUserDefaults standardUserDefaults] objectForKey:lastFrameKey];
+    
+    if(lastFrame.length > 0)
+        result = NSRectFromString(lastFrame);
+    
+    return result;
+}
+
+#pragma mark - NSWindowDelegate
+- (void)windowWillClose:(NSNotification *)notification
+{
+    // Save the current viewController's frame
+    if(self.activeViewController && (self.window.styleMask & NSWindowStyleMaskResizable)) {
+        [self saveFrameForViewController:self.activeViewController];
+    }
 }
 
 #pragma mark - NSToolbarItem Actions

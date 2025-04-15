@@ -35,5 +35,6 @@
 
 @optional
 - (NSString *)preferenceToolTip;
+- (void)goToAnchor:(NSString *)anchor;
 
 @end
